@@ -30,7 +30,7 @@ def connect_to_db(host, max_retries=5, delay=3):
 
 
 def fetch_data(base_url, dataset_id, limit =999):
-    client = Socrata(base_url, None, timeout=30)
+    client = Socrata(base_url, None, timeout=60)
     results = client.get(dataset_id, limit=limit)
     results_df = pd.DataFrame.from_records(results)
     results_df = results_df.map(
@@ -40,36 +40,35 @@ def fetch_data(base_url, dataset_id, limit =999):
     return results_df
         
     
-# def load_to_source(config):
-#     data = fetch_data("data.cityofchicago.org", "v6vf-nfxy")
-#     engine = create_engine(
-#         f"postgresql+psycopg://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{config['database']}"
-#     )
-
-#     data.to_sql("raw_data", con=engine, if_exists="append", index=False)
-#     print("data loaded successfully")
-#     return True
-
 def load_to_source(config):
-    df = fetch_data("data.cityofchicago.org", "v6vf-nfxy")  # prints 999 already
-    assert len(df) == 999, f"unexpected df size: {len(df)}"
+    data = fetch_data("data.cityofchicago.org", "v6vf-nfxy")
+    engine = create_engine(
+        f"postgresql+psycopg://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{config['database']}"
+    )
 
-    url = f"postgresql+psycopg://{config['user']}:{config['password']}@" \
-          f"{config['host']}:{config['port']}/{config['database']}"
-    print("[connect]", url)
+    data.to_sql("raw_data", con=engine, if_exists="append", index=False)
+    print("data loaded successfully")
+    return True
 
-    engine = create_engine(url, pool_pre_ping=True)
+# def load_to_source(config):
+#     df = fetch_data("data.cityofchicago.org", "v6vf-nfxy")  # prints 999 already
+#     assert len(df) == 999, f"unexpected df size: {len(df)}"
 
-    # Use REPLACE once to make this deterministic (expect 999 exactly)
-    with engine.begin() as conn:
-        df.to_sql("raw_data", con=conn, schema="public",
-                  if_exists="replace", index=False, method="multi", chunksize=1000)
+#     url = f"postgresql+psycopg://{config['user']}:{config['password']}@" \
+#           f"{config['host']}:{config['port']}/{config['database']}"
+#     print("[connect]", url)
 
-        total = conn.exec_driver_sql("SELECT COUNT(*) FROM public.raw_data").scalar()
-        db, addr, port = conn.exec_driver_sql(
-            "SELECT current_database(), inet_server_addr(), inet_server_port()"
-        ).fetchone()
-        print(f"[post-write] db={db} host={addr} port={port} rows={total}")
+#     engine = create_engine(url, pool_pre_ping=True)
+
+#     with engine.begin() as conn:
+#         df.to_sql("raw_data", con=conn, schema="public",
+#                   if_exists="replace", index=False, method="multi", chunksize=1000)
+
+#         total = conn.exec_driver_sql("SELECT COUNT(*) FROM public.raw_data").scalar()
+#         db, addr, port = conn.exec_driver_sql(
+#             "SELECT current_database(), inet_server_addr(), inet_server_port()"
+#         ).fetchone()
+#         print(f"[post-write] db={db} host={addr} port={port} rows={total}")
 
 def load_to_postgres(source_config):
     postgres_connection = connect_to_db(source_config['host'])
